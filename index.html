@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Live board: a read-only copy of the bid app's Calendar tab, refreshed every minute. */
+/* Live board: a read-only copy of the bid app's Calendar tab, refreshed every 90 seconds. */
 :root{
   --bg:#eef2f6; --surface:#ffffff; --sunk:#e4e9f0; --ink:#152130; --muted:#5a6779; --line:#d3dae4;
   --accent:#1d5bb8; --accent-ink:#ffffff; --accent-soft:#dce7f8;
@@ -74,7 +74,7 @@ const DESK={a:"Airframe",e:"Engine"},K={vac:"Vacation",hol:"Holiday",mix:"Vacati
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let data=null,desk=(()=>{try{return localStorage.getItem("board.desk")||"all"}catch(e){return"all"}})(),failed=false;
 function render(){const app=document.getElementById("app"),upd=document.getElementById("upd");
-  if(!data){app.innerHTML=`<div class="msg">${failed?"The board couldn't be loaded. It will try again in a minute.":"Loading the board…"}</div>`;return}
+  if(!data){app.innerHTML=`<div class="msg">${failed?"The board couldn't be loaded. It will try again shortly.":"Loading the board…"}</div>`;return}
   const y=data.year,cap=data.caps||{},u=new Date(data.updated),age=(Date.now()-u)/6e4;
   upd.className="upd"+(failed?" stale":"");
   upd.textContent=`Updated ${u.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}`+(failed?" · can't reach the board right now":age>1?` · ${age<60?Math.round(age)+" min":Math.round(age/60)+" hr"} ago`:" · just now");
@@ -93,9 +93,16 @@ function render(){const app=document.getElementById("app"),upd=document.getEleme
       h+=`<div class="day${full?" full":""}" title="${esc(tip)}"><div class="dn"><b>${d}</b><span class="gauges">${desk!=="e"?g("AF",af,cap.airframe):""}${desk!=="a"?g("EN",en,cap.engine):""}</span></div>${shown.map(x=>`<span class="chip c-${esc(x[2])}"><span>${esc(x[0])}</span></span>`).join("")}</div>`}
     h+=`</div></section>`}
   app.innerHTML=h+`</div>`}
-async function load(){try{const r=await fetch(SRC+(SRC.startsWith("http")?"?t="+Date.now():""),{cache:"no-store"});if(!r.ok)throw new Error(r.status);data=await r.json();failed=false}catch(e){failed=true}render()}
+// The latest commit on the data branch says which board.json is current; that exact file is never stale. raw.githubusercontent.com
+// caches a branch file for up to 5 minutes, so it's only the fallback (for example when GitHub's 60 checks an hour per network run out).
+let sha="";
+async function latest(){if(!owner)return"";const r=await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/data`,{cache:"no-cache",headers:{Accept:"application/vnd.github.sha"}});if(!r.ok)throw new Error(r.status);return(await r.text()).trim()}
+async function load(){try{let s="";try{s=await latest()}catch(e){s=""}
+    if(s&&s===sha&&data){failed=false;render();return}
+    const url=s?`https://raw.githubusercontent.com/${owner}/${repo}/${s}/board.json`:SRC+(SRC.startsWith("http")?"?t="+Date.now():"");
+    const r=await fetch(url,{cache:s?"default":"no-store"});if(!r.ok)throw new Error(r.status);data=await r.json();sha=s;failed=false}catch(e){failed=true}render()}
 document.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;desk=b.dataset.d;try{localStorage.setItem("board.desk",desk)}catch(_){}render()});
-load();setInterval(load,60000);
+load();setInterval(load,90000);
 })();
 </script>
 </body>
